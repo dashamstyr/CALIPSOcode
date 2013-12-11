@@ -195,27 +195,6 @@ def vfm_type(rowvals,type_str):
     """
     import numpy as np
     
-#    #define class to work as switch-case operator
-#    class switch(object):
-#        def __init__(self, value):
-#            self.value = value
-#            self.fall = False
-#    
-#        def __iter__(self):
-#            """Return the match method once, then stop"""
-#            yield self.match
-#            raise StopIteration
-#        
-#        def match(self, *args):
-#            """Indicate whether or not to enter a case suite"""
-#            if self.fall or not args:
-#                return True
-#            elif self.value in args: # changed for v1.5, see below
-#                self.fall = True
-#                return True
-#            else:
-#                return False
-    
     mask3 = np.uint16(7)
     mask2 = np.uint16(3)
     mask1 = np.uint16(1)
@@ -549,7 +528,7 @@ def filterandflatten(caldat_in, features, combine = False, domask = False, maskn
                     combine - a boolean to determine whether to separate features in to columns
                     domask - a boolean to determine whether to apply a feature type mask
                     maskname - a string describing the category of fature type 
-                    mask to perform, is domask = True
+                    mask to perform, if domask = True
         
         outputs:    caldat_out - a Calipso class object contining the following:
                         dfout - a dataframe, same length as df, but only one column per feature
@@ -573,12 +552,14 @@ def filterandflatten(caldat_in, features, combine = False, domask = False, maskn
     
     featurenums = []
     featurenames = []
+    maskdataout = {'FieldDescription':maskdata['FieldDescription'], 'ByteTxt':[]}
     
     for f in features:
         try:
             temp = maskdata.loc['ByteTxt'][0].index(f)
             featurenums.append(temp)
             featurenames.append(f)
+            maskdataout['ByteTxt'].append(featurenames)
         except ValueError:
             print "ERROR: The feature %s does not exist in this mask" %f
             print "Available features are: "+ ', '.join(maskdata['ByteTxt'])
@@ -608,7 +589,7 @@ def filterandflatten(caldat_in, features, combine = False, domask = False, maskn
     caldat_out = Calipso()
     caldat_out.metadata = caldat_in.metadata
     caldat_out.VFM = dfout
-    caldat_out.maskdata = maskdata
+    caldat_out.maskdata = maskdataout
     
     
     return caldat_out

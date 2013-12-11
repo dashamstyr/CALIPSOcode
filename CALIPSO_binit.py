@@ -51,7 +51,7 @@ class binit(object):
         self.binsize=(maxval-minval)/numbins
         self.bin_edges=np.arange(minval,maxval + 0.5*self.binsize,self.binsize)
         self.bin_centers= (self.bin_edges[:-1] + self.bin_edges[1:])/2.
-
+                    
     def do_bins(self,data_vec):
         """
            bin the items in data_vec into self.numbins
@@ -129,76 +129,7 @@ class binit(object):
 #fastbin.do_bins=MethodType(do_bins, None, fastbin)
 
     
-if __name__=="__main__":
-    #
-    # limits set for MOD03.A2006275.0440.005.2010182222019.hdf
-    #
-    #get the name of files ending in hdf
-    the_files=glob.glob('MOD03*275*hdf')
-    #take the first one (only one file fits this description)
-    the_file=the_files[0]
-    print the_file
-    
-    #get the full latitude and longitude arrays
-    sdgeom=pyhdf.SD.SD(the_file)
-    fullLats=sdgeom.select('Latitude')
-    fullLats=fullLats.get()
-    fullLons=sdgeom.select('Longitude')
-    fullLons=fullLons.get()
-    max_x=200
-    max_y=300
-    partLats=fullLats[:max_x,:max_y]
-    partLons=fullLons[:max_x,:max_y]
-    sdgeom.end()
 
-    #plot the latitdue and longitude of every pixel
-    #for a small part of the scene
-    fig1,axis1=plt.subplots(1,1)
-    axis1.plot(partLons,partLats,'b+',markersize=10)
-    axis1.set_ylabel('latitude (deg North)')
-    axis1.set_xlabel('longitude (deg East)')
-    axis1.set_title('partial scene pixel map')
-    
-    #plot the latitdue and longitude of every pixel
-    #for a small part of the scene
-    fig1,axis1=plt.subplots(1,1)
-    axis1.plot(partLons,partLats,'b+',markersize=10)
-    axis1.set_ylabel('latitude (deg North)')
-    axis1.set_xlabel('longitude (deg East)')
-
-    #
-    # put on a grid
-    #
-    leftLon= -82.
-    regLons=np.arange(-82,-81,0.05)
-    regLats=np.arange(-28,-27,0.05)
-    lonMat,latMat=np.meshgrid(regLons,regLats)
-    axis1.plot(lonMat,latMat,'r.',markersize=8)
-    axis1.set_title('regular grid (red) and pixel map (blue)')
-    #axis1.set_xlim([-82,-81])
-    #axis1.set_ylim([-28.,-27])
-    fig1.savefig('meshgrid.png')
-
-    #
-    #  now zoom the axis limits
-    #
-    fig2,axis2=plt.subplots(1,1)
-    axis2.plot(partLons,partLats,'b+',markersize=10)
-    axis2.set_ylabel('latitude (deg North)')
-    axis2.set_xlabel('longitude (deg East)')
-    axis2.plot(lonMat,latMat,'r.',markersize=8)
-    axis2.set_xlim([-82,-81.5])
-    axis2.set_ylim([-28,-27.5])
-    axis2.set_title('zoomed overlay')
-    fig2.savefig('meshgrid_small.png')
-
-    numbins=20
-    bin_lats=binit(-28,-27,numbins,-999,-888)
-    bin_lons=binit(-82,-81,numbins,-999,-888)
-    
-    lat_count,lat_index,lowlats,highlats=bin_lats.do_bins(partLats.ravel())    
-
-    plt.show()
 
 
         

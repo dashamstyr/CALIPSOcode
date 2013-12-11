@@ -29,8 +29,8 @@ def hist_latlon(lats,lons,rads,bin_lats,bin_lons):
             rad_list=out_vals[the_row,the_col]
             if len(rad_list)==0:
                 rad_grid[the_row,the_col]=np.nan
-                lat_grid[the_row,the_col]=np.nan
-                lon_grid[the_row,the_col]=np.nan
+                lat_grid[the_row,the_col]=bin_lats.get_centers()[the_row]
+                lon_grid[the_row,the_col]=bin_lons.get_centers()[the_col]
             else:
                 try:
                     rad_vals=np.take(rads,rad_list)
@@ -86,8 +86,8 @@ class hist_class(object):
                 rad_list=self.out_vals[row,col]
                 if len(rad_list)==0:
                     rad_grid[row,col]=np.nan
-                    lat_grid[row,col]=np.nan
-                    lon_grid[row,col]=np.nan
+                    lat_grid[row,col]=self.bin_lats.get_centers()[row]
+                    lon_grid[row,col]=self.bin_lons.get_centers()[col]
                 else:
                     rad_vals=np.take(self.rads,rad_list)
                     lat_vals=np.take(self.lats,rad_list)
@@ -111,8 +111,8 @@ class hist_class(object):
                 rad_list=self.out_vals[row,col]
                 if len(rad_list)==0:
                     rad_grid[row,col]=np.nan
-                    lat_grid[row,col]=np.nan
-                    lon_grid[row,col]=np.nan
+                    lat_grid[row,col]=self.bin_lats.get_centers()[row]
+                    lon_grid[row,col]=self.bin_lons.get_centers()[col]
                 else:
                     rad_vals=np.take(self.rads,rad_list)
                     lat_vals=np.take(self.lats,rad_list)
