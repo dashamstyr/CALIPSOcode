@@ -4,10 +4,23 @@ Created on Mon Oct 21 12:42:41 2013
 
 @author: Paul Cottle
 """
+import os
+import subprocess
+import platform
+import glob
+import numpy as np
+from Tkinter import Tk
+import tkFileDialog
+import re
+import pandas as pan
+import tables
+import datetime as dt
+import pytz
+from itertools import izip,tee
+from copy import deepcopy
 
-def set_dir(titlestring):
-    from Tkinter import Tk
-    import tkFileDialog
+
+def set_dir(titlestring):    
      
     # Make a top-level instance and hide since it is ugly and big.
     root = Tk()
@@ -32,18 +45,9 @@ def set_dir(titlestring):
        print "you didn't open anything!"
     
     # Get rid of the top-level instance once to make it actually invisible.
-    root.destroy() 
+    root.destroy()     
      
-
-       
-    
-     
-def get_files(titlestring,filetype = ('.hdf','*.hdf')):
-    from Tkinter import Tk
-    import tkFileDialog
-    import re
-     
-     
+def get_files(titlestring,filetype = ('.hdf','*.hdf')):    
     # Make a top-level instance and hide since it is ugly and big.
     root = Tk()
     root.withdraw()
@@ -84,34 +88,42 @@ def get_files(titlestring,filetype = ('.hdf','*.hdf')):
     
     root.destroy()
 
-def h5convert(h4file, verbose = False):
-    import subprocess
+def h5convert(h4file, h5file=[], verbose = False):
+    """
+    CALIPSO files come in HDF4 format.  This uses subprocess to open external 
+    program called h4toh5.exe to convert thes einto HDF5 format usable by Pandas
+    If input includes h5file, new file will have that name.  If not, new files 
+    will have same name as old ones and be placed in same folder
     
-    cmd_arg = 'h4toh5convert '+h4file    
+    h4toh5 can be downloaded from http://www.hdfgroup.org/h4toh5/download.html
+    """
+    if platform.system()=='Windows':
+        executable='h4toh5convert'
+    else:
+        execuatable='h4toh5'
+        
+    if h5file:
+        cmd_arg = '{0} {1} {2}'.format(executable,h4file,h5file)
+    else:
+        cmd_arg = '{0} {1}'.format(executable,h4file)   
     
     out = subprocess.Popen(cmd_arg, shell=True)
     
     if verbose:
         print out
 
-def h5convert_all(verbose = False):
-    import os
-    import subprocess
-    import glob
+def h5convert_all(newdir=[],verbose = False):
     
-    olddir = os.getcwd()
-    newdir = set_dir('Select Folder to Convert')
+    olddir=os.getcwd()
+    if not newdir:
+        newdir = set_dir('Select Folder to Convert')
     
     os.chdir(newdir)
     
     h4files = glob.glob('*.hdf')
     
     for f in h4files:
-        cmd_arg = 'h4toh5convert '+f
-        out = subprocess.Popen(cmd_arg, shell=True)
-        
-        if verbose:
-            print out
+        h5convert(h4file=f,verbose=verbose)
     
     os.chdir(olddir)
             
@@ -136,9 +148,7 @@ def vfm_row2block(rowvals):
 
         Based on vfm_row2block.m code from  LARC website (http://www-calipso.larc.nasa.gov/resources/calipso_users_guide/data_summaries/vfm/index.php)
 
-    """
-    import numpy as np
-    
+    """    
     datablock = np.empty((15,55+200+290),dtype = np.uint16)
     offset = 0
     step = 55
@@ -193,8 +203,6 @@ def vfm_type(rowvals,type_str):
         Based on vfm_type.m code from  LARC website (http://www-calipso.larc.nasa.gov/resources/calipso_users_guide/data_summaries/vfm/index.php)
         
     """
-    import numpy as np
-    
     mask3 = np.uint16(7)
     mask2 = np.uint16(3)
     mask1 = np.uint16(1)
@@ -284,13 +292,7 @@ def to180(lon_in):
 
 class Calipso:
     
-    def __init__(self,metadata = [], VFM = [], maskdata = [], h5file=[], raw = True):        
-        import pandas as pan
-        import tables
-        import numpy as np
-        import datetime as dt
-        import pytz
-        from itertools import izip,tee
+    def __init__(self,metadata = [], VFM = [], maskdata = [], h5file=[], raw = True):
         
         if h5file:
             print "Opening "+h5file
@@ -373,13 +375,15 @@ class Calipso:
                 
                 df.sort(axis=1, inplace=True)
                 
-                self.metadata = pan.DataFrame.from_dict(metadict, orient = 'index')
+                self.metadata = metadict
                 self.VFM = df
-                self.maskdata = []
+                self.maskdata = dict()
             else:
-                self.metadata = pan.read_hdf(h5file,'metadata')
                 self.VFM = pan.read_hdf(h5file,'VFM')
-                self.maskdata = pan.read_hdf(h5file,'maskdata')
+                dftemp=pan.read_hdf(h5file,'metadata')
+                self.metadata = dict(zip(dftemp.index,dftemp.values))
+                dftemp=pan.read_hdf(h5file,'maskdata')
+                self.maskdata = dict(zip(dftemp.index,dftemp.values))
             print "DONE!"             
         else:
             if VFM:
@@ -390,20 +394,17 @@ class Calipso:
             else:
                 print "Creating empty Calipso classs object"
                 self.VFM = pan.DataFrame()
-                self.metadata = pan.DataFrame()
-                self.maskdata = pan.DataFrame()
+                self.metadata = dict()
+                self.maskdata = dict()
             print "DONE!"
     
     def save(self,filename):
         """ Saves a Calipso class object in HDF5 format """
-        
-        import pandas as pan
-        
         store = pan.HDFStore(filename)
         
-        store['metadata'] = self.metadata
+        store['metadata'] = pan.DataFrame.from_dict(self.metadata)
         store['VFM'] = self.VFM
-        store['maskdata'] = self.maskdata
+        store['maskdata'] = pan.DataFrame.from_dict(self.maskdata)
         
         store.close()
         
@@ -414,10 +415,7 @@ class Calipso:
         lon, time, and altitude
         """
         
-        print "Selecting Data Window ..."
-        from copy import deepcopy
-        import pandas as pan
-        
+        print "Selecting Data Window ..."        
         if inplace:
             dfout = self.VFM
         else:
@@ -492,9 +490,6 @@ class Calipso:
         """
         print "Masking for %s Features ..." %maskname
         
-        from copy import deepcopy
-        import pandas as pan
-        
         if self.maskdata:
             print "ERROR:  This object has already been masked for Type:" +self.masktype['FieldDesc']
         else:            
@@ -509,19 +504,19 @@ class Calipso:
             
             if inplace:
                 self.VFM = dfout
-                self.maskdata = pan.DataFrame.from_dict(maskdata, orient = 'index')
+                self.maskdata = maskdata
                 print "DONE!"
             else:
                 calout = Calipso()
                 calout.metadata = deepcopy(self.metadata)
                 calout.VFM = dfout
-                calout.maskdata = pan.DataFrame.from_dict(maskdata, orient = 'index')
+                calout.maskdata = maskdata
                 print "DONE!"
                 return calout
         
         
 
-def filterandflatten(caldat_in, features, combine = False, domask = False, maskname = []):
+def filterandflatten(caldat_in, features, combine = False, domask = False, maskname = [],verbose=False):
     """
         inputs:     caldat_in - a Calipso class object to be masked
                     features - a list of strings defining the feature subtypes to be scanned for
@@ -534,14 +529,11 @@ def filterandflatten(caldat_in, features, combine = False, domask = False, maskn
                         dfout - a dataframe, same length as df, but only one column per feature
                         element, each representing the number of 30m x 333m blocks containing the
                         desired feature at that location
-                        maskdata - a dataframe containing strings defining the feature type mask
+                        maskdata - a dict containing strings defining the feature type mask
         
     """
-    print "Counting Instances of "+', '.join(features)
-    
-    import pandas as pan
-    import numpy as np
-    
+    if verbose:
+        print "Counting Instances of "+', '.join(features)    
     if domask:
         caldat_tmp = caldat_in.feature_mask(maskname,inplace = False)
         df = caldat_tmp.VFM
@@ -556,7 +548,7 @@ def filterandflatten(caldat_in, features, combine = False, domask = False, maskn
     
     for f in features:
         try:
-            temp = maskdata.loc['ByteTxt'][0].index(f)
+            temp = maskdata['ByteTxt'][0].index(f)
             featurenums.append(temp)
             featurenames.append(f)
             maskdataout['ByteTxt'].append(featurenames)
@@ -585,7 +577,87 @@ def filterandflatten(caldat_in, features, combine = False, domask = False, maskn
             else:
                 dfout.loc[i,fname] = (temp == fnum).sum()
     
-    print "DONE!"
+    if verbose:
+        print "DONE!"
+    caldat_out = Calipso()
+    caldat_out.metadata = caldat_in.metadata
+    caldat_out.VFM = dfout
+    caldat_out.maskdata = maskdataout
+    
+    
+    return caldat_out
+
+def findtops(caldat_in, features=[], combine = False, domask = False, maskname = [],verbose=False):
+    """
+        inputs:     caldat_in - a Calipso class object to be masked
+                    features - a list of strings defining the feature subtypes to be scanned for
+                    combine - a boolean to determine whether to separate features in to columns
+                    domask - a boolean to determine whether to apply a feature type mask
+                    maskname - a string describing the category of fature type 
+                    mask to perform, if domask = True
+        
+        outputs:    caldat_out - a Calipso class object contining the following:
+                        dfout - a dataframe, same length as df, but only one column per feature
+                        element, each representing the number of 30m x 333m blocks containing the
+                        desired feature at that location
+                        maskdata - a dict containing strings defining the feature type mask
+        
+    """
+    if verbose:
+        print "Finding tops of all {0} features".format(', '.join(features)) 
+    if domask:
+        caldat_tmp = caldat_in.feature_mask(maskname,inplace = False)
+        df = caldat_tmp.VFM
+        maskdata = caldat_tmp.maskdata
+    else:
+        df = caldat_in.VFM
+        maskdata = caldat_in.maskdata
+    
+    featurenums = []
+    featurenames = []
+    maskdataout = {'FieldDescription':maskdata['FieldDescription'], 'ByteTxt':[]}
+    
+    if features:
+        for f in features:
+            try:
+                temp = maskdata['ByteTxt'][0].index(f)
+                featurenums.append(temp)
+                featurenames.append(f)
+                maskdataout['ByteTxt'].append(featurenames)
+            except ValueError:
+                print "ERROR: The feature %s does not exist in this mask" %f
+                print "Available features are: "+ ', '.join(maskdata['ByteTxt'])
+    
+        if combine:
+            #output column is named ofater first feature in list with '+' added
+            colname = [featurenames[0]+'+']
+            numrows = len(df.index)
+            numcols = 1
+            dfout = pan.DataFrame(np.zeros((numrows,numcols), dtype = np.uint16), index = df.index, columns = colname)
+            for i in df.index:
+                temp=df.ix[i]
+                if any(temp.isin(featurenums)):
+                    dfout.ix[i]=temp.isin(featurenums).index[-1]
+        else:
+            numrows = len(df.index)
+            numcols = len(features)
+            dfout = pan.DataFrame(np.zeros((numrows,numcols), dtype = np.uint16), index = df.index, columns = featurenames)  
+            for fname,fnum in zip(featurenames,featurenums):
+                for i in df.index:
+                    temp=df.ix[i]
+                    if any(temp.ix[temp==fnum]):
+                        dfout.loc[i,fname]=temp.ix[temp==fnum].index[-1]   
+    else:
+        colname=[maskdata['FieldDescription']]
+        numrows=len(df.index)
+        numcols=1
+        dfout = pan.DataFrame(np.zeros((numrows,numcols), dtype = np.uint16), index = df.index, columns = colname)
+        for i in df.index:
+            temp=df.ix[i]
+            if any(temp.ix[temp>0]):
+                dfout.ix[i]=temp.ix[temp>0].index[-1]
+    if verbose:
+        print "DONE!"
     caldat_out = Calipso()
     caldat_out.metadata = caldat_in.metadata
     caldat_out.VFM = dfout
@@ -602,26 +674,26 @@ if __name__ == "__main__":
     
     os.chdir('C:\Users\dashamstyr\Dropbox\Lidar Files\CALIPSO Data Reader')
     
-#    c1 = Calipso(h5file = 'CAL_LID_L2_VFM-ValStage1-V3-30.2013-04-22T00-37-50ZD.h5', raw = True)
-#    
-#    lats = [30,40]
-#    lons = []
-#    alts = [0,20000]
-#    
-#    c1.window_select(latrange = lats,lonrange = lons,altrange = alts, inplace = True)
-#    
-#    c1_masked = c1.feature_mask('aerosol')
-#    
-#    c1_dust = filterandflatten(c1_masked,features = ['Dust','Polluted Dust'], combine = True)
+    c1 = Calipso(h5file = 'CAL_LID_L2_VFM-ValStage1-V3-30.2013-04-22T00-37-50ZD.h5', raw = True)
+    
+    lats = [30,31]
+    lons = []
+    alts = [0,40000]
+    
+    c1.window_select(latrange = lats,lonrange = lons,altrange = alts, inplace = True)
+    
+    c1_masked = c1.feature_mask('cloud')
+    
+    c1_cloudtops = findtops(c1_masked)
 #
 #    c1_dust.save('test.h5') 
     
-    c1_dust = Calipso(h5file = 'test.h5',raw = False)
+#    c1_dust = Calipso(h5file = 'test.h5',raw = False)
     
-    fig = plt.figure()
-    ax1 = fig.add_subplot(111)
-    ax1.plot(c1_dust.VFM.index.get_level_values('Lats').values,c1_dust.VFM.values)
-    plt.show()
+#    fig = plt.figure()
+#    ax1 = fig.add_subplot(111)
+#    ax1.plot(c1_dust.VFM.index.get_level_values('Lats').values,c1_dust.VFM.values)
+#    plt.show()
     
 
     
